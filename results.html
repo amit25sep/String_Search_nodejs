@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FileSearch — Results</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d0f14; --surface: #13161e; --surface2: #1a1e28; --border: #252a38;
+    --accent: #00e5ff; --accent2: #ff6b35; --accent3: #a78bfa; --accent4: #fbbf24;
+    --text: #e2e8f0; --text-muted: #6b7a99; --text-dim: #3d4a66;
+    --success: #34d399; --error: #f87171;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 32px 32px; pointer-events: none; z-index: 0;
+  }
+  .page { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100vh; }
+
+  /* Top bar */
+  .topbar {
+    padding: 11px 20px; border-bottom: 1px solid var(--border);
+    background: rgba(13,15,20,0.95); backdrop-filter: blur(12px);
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .logo { display: flex; align-items: center; gap: 8px; }
+  .logo-icon { width: 28px; height: 28px; background: linear-gradient(135deg, var(--accent), var(--accent3)); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .logo-text { font-size: 1rem; font-weight: 800; }
+  .logo-text span { color: var(--accent); }
+  .topbar-stats { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stat-pill { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; padding: 3px 9px; border-radius: 20px; border: 1px solid var(--border); color: var(--text-muted); background: var(--surface2); }
+  .stat-pill strong { color: var(--accent); }
+  .query-pill { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; background: rgba(0,229,255,0.07); border: 1px solid rgba(0,229,255,0.22); color: var(--accent); padding: 3px 11px; border-radius: 20px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exact-pill { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; background: rgba(251,191,36,0.07); border: 1px solid rgba(251,191,36,0.22); color: var(--accent4); padding: 3px 9px; border-radius: 20px; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .filter-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 11px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; outline: none; width: 200px; transition: border-color 0.2s; }
+  .filter-input:focus { border-color: var(--accent); }
+  .filter-input::placeholder { color: var(--text-dim); }
+
+  /* Layout */
+  .content { display: flex; flex: 1; overflow: hidden; }
+
+  /* File list panel */
+  .file-panel { width: 300px; min-width: 300px; border-right: 1px solid var(--border); background: var(--surface); overflow-y: auto; display: flex; flex-direction: column; }
+  .fp-header { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); background: var(--surface2); position: sticky; top: 0; z-index: 5; }
+  .fli { padding: 8px 12px; border-bottom: 1px solid rgba(37,42,56,0.35); cursor: pointer; transition: background 0.12s; display: flex; align-items: center; gap: 7px; }
+  .fli:hover { background: rgba(0,229,255,0.04); }
+  .fli.active { background: rgba(0,229,255,0.08); border-left: 2px solid var(--accent); }
+  .fli-name { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fli-inner { font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; color: var(--accent4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+  .fli-badge { font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; background: rgba(255,107,53,0.12); color: var(--accent2); border: 1px solid rgba(255,107,53,0.2); padding: 1px 5px; border-radius: 8px; flex-shrink: 0; }
+  .fli-icon { font-size: 12px; flex-shrink: 0; }
+  .empty-filter { padding: 14px; text-align: center; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+
+  /* Match panel */
+  .match-panel { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+  .mph { padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--surface2); position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .mph-path { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mph-dir { color: var(--text-muted); }
+  .mph-name { color: var(--accent); font-weight: 600; }
+  .mph-inner { color: var(--accent4); }
+  .mph-btns { display: flex; gap: 5px; flex-shrink: 0; }
+  .mph-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 3px 9px; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--text-muted); cursor: pointer; transition: all 0.14s; white-space: nowrap; }
+  .mph-btn.open:hover { border-color: var(--accent); color: var(--accent); }
+  .mph-btn.reveal:hover { border-color: var(--accent3); color: var(--accent3); }
+  .mph-count { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: var(--accent2); background: rgba(255,107,53,0.1); border: 1px solid rgba(255,107,53,0.2); padding: 2px 7px; border-radius: 10px; }
+
+  /* File type opener hint */
+  .open-hint { font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; color: var(--text-dim); padding: 2px 0; }
+  .open-hint strong { color: var(--accent4); }
+
+  /* Match table */
+  .match-table { width: 100%; border-collapse: collapse; }
+  .match-table tr { border-bottom: 1px solid rgba(37,42,56,0.4); transition: background 0.12s; }
+  .match-table tr:last-child { border-bottom: none; }
+  .match-table tr:hover { background: rgba(0,229,255,0.025); }
+  .td-line { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; color: var(--text-dim); padding: 7px 11px; text-align: right; min-width: 54px; background: rgba(0,0,0,0.1); border-right: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+  .td-line:hover { color: var(--accent); background: rgba(0,229,255,0.05); }
+  .td-content { font-family: 'JetBrains Mono', monospace; font-size: 0.71rem; color: var(--text-muted); padding: 7px 14px; white-space: pre-wrap; word-break: break-all; line-height: 1.55; }
+  .td-content mark { background: rgba(0,229,255,0.2); color: var(--accent); border-radius: 2px; padding: 0 1px; font-weight: 600; }
+  .td-actions { padding: 3px 8px; white-space: nowrap; vertical-align: middle; }
+  .row-open { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; color: var(--text-muted); cursor: pointer; opacity: 0; transition: all 0.12s; white-space: nowrap; }
+  tr:hover .row-open { opacity: 1; }
+  .row-open:hover { border-color: var(--accent); color: var(--accent); }
+
+  .no-sel { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-dim); text-align: center; padding: 40px; }
+  .no-sel-icon { font-size: 36px; opacity: 0.3; }
+  .no-sel-text { font-size: 0.82rem; color: var(--text-muted); }
+
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface2); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 13px; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--accent); z-index: 999; box-shadow: 0 4px 20px rgba(0,229,255,0.15); animation: toastIn 0.2s ease; pointer-events: none; }
+  @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-icon">🔍</div>
+      <div class="logo-text">File<span>Search</span> — Results</div>
+    </div>
+    <div class="topbar-stats" id="topStats"></div>
+    <div id="queryPill" class="query-pill" style="display:none"></div>
+    <div id="exactPill" class="exact-pill" style="display:none">Exact Match</div>
+    <div class="topbar-right">
+      <input class="filter-input" id="filterInput" placeholder="Filter files..." oninput="filterFiles(this.value)" />
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="file-panel" id="filePanel">
+      <div class="fp-header">📁 Matched Files</div>
+      <div id="fileList"></div>
+    </div>
+    <div class="match-panel" id="matchPanel">
+      <div class="no-sel">
+        <div class="no-sel-icon">👈</div>
+        <div class="no-sel-text">Select a file to view matches</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let allResults = [];
+let currentQuery = '';
+let currentOpts = {};
+let activeIdx = null;
+
+// ── File type → app label mapping ─────────────────────────────────────────────
+function getOpenerLabel(filename) {
+  const ext = (filename.split('.').pop() || '').toLowerCase();
+  const map = {
+    csv: 'Excel', xlsx: 'Excel', xls: 'Excel', xlsm: 'Excel', ods: 'Excel',
+    doc: 'Word', docx: 'Word', rtf: 'Word',
+    pdf: 'PDF Viewer',
+    py: 'VS Code / Notepad++', js: 'VS Code / Notepad++', ts: 'VS Code / Notepad++',
+    json: 'VS Code / Notepad++', xml: 'VS Code / Notepad++', html: 'Browser / VS Code',
+    md: 'VS Code / Notepad++', css: 'VS Code / Notepad++',
+    txt: 'Notepad / Notepad++', log: 'Notepad / Notepad++',
+    ini: 'Notepad', cfg: 'Notepad', conf: 'Notepad',
+    bat: 'Notepad', sh: 'Notepad++',
+    zip: 'Archive (open parent)', jar: 'Archive', tar: 'Archive', gz: 'Archive'
+  };
+  return map[ext] || 'Default App';
+}
+
+function getFileIcon(fname) {
+  const ext = (fname.split('.').pop() || '').toLowerCase();
+  const map = { csv:'📊',xlsx:'📊',xls:'📊',doc:'📝',docx:'📝',pdf:'📕',py:'🐍',js:'🟨',ts:'🟦',json:'📋',xml:'📋',html:'🌐',css:'🎨',md:'📖',log:'📜',txt:'📄',zip:'🗜️',tar:'📦',gz:'🗜️',jar:'☕',war:'🗜️' };
+  return map[ext] || '📄';
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  const params = new URLSearchParams(window.location.search);
+  const resultId = params.get('id');
+  const fileIdx  = params.get('file');
+  currentQuery   = params.get('query') || '';
+  currentOpts    = { regex: params.get('regex') === 'true', case: params.get('case') === 'true', exact: params.get('exact') === 'true' };
+
+  if (!resultId) {
+    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#6b7a99;font-family:monospace;background:#0d0f14">No result ID — run a search first.</div>`;
+    return;
+  }
+
+  let data;
+  try {
+    const fetchUrl = '/results-data?id=' + resultId + (fileIdx !== null ? '&file=' + fileIdx : '');
+    const res = await fetch(fetchUrl);
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+    data = await res.json();
+  } catch(e) {
+    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#f87171;font-family:monospace;background:#0d0f14">⚠ ${e.message}</div>`;
+    return;
+  }
+
+  allResults = data.results || [];
+
+  // Update page title
+  if (data.singleFile && allResults[0]) {
+    const f = allResults[0].archiveFile || allResults[0].file;
+    document.title = 'FileSearch — ' + f.substring(Math.max(f.lastIndexOf('\\'), f.lastIndexOf('/')) + 1);
+  }
+
+  // Stats
+  const stats = document.getElementById('topStats');
+  if (data.singleFile) {
+    const r = allResults[0];
+    stats.innerHTML = `<div class="stat-pill">Matches: <strong>${r.matches.length.toLocaleString()}</strong></div>
+      <div class="stat-pill">From: <strong>${(data.totalFiles||0).toLocaleString()} files scanned</strong></div>`;
+  } else {
+    stats.innerHTML = `
+      <div class="stat-pill">Scanned: <strong>${(data.filesScanned||0).toLocaleString()} / ${(data.totalFiles||0).toLocaleString()}</strong></div>
+      <div class="stat-pill">Matched: <strong>${allResults.length.toLocaleString()}</strong></div>
+      <div class="stat-pill">Matches: <strong>${(data.totalMatches||0).toLocaleString()}</strong></div>
+      <div class="stat-pill">Time: <strong>${data.elapsed||'—'}s</strong></div>`;
+  }
+
+  // Query pill
+  if (currentQuery) {
+    const qp = document.getElementById('queryPill');
+    qp.textContent = `🔎 "${currentQuery}"`;
+    qp.style.display = 'block';
+  }
+  if (currentOpts.exact) {
+    document.getElementById('exactPill').style.display = 'block';
+  }
+
+  // Hide file panel in single-file mode
+  if (data.singleFile) {
+    document.getElementById('filePanel').style.display = 'none';
+  }
+
+  renderFileList(allResults);
+  if (allResults.length > 0) selectFile(0);
+});
+
+// ── File list ─────────────────────────────────────────────────────────────────
+function renderFileList(results) {
+  const container = document.getElementById('fileList');
+  if (!results.length) { container.innerHTML = '<div class="empty-filter">No files match filter</div>'; return; }
+  container.innerHTML = results.map((r, idx) => {
+    const displayFile = r.archiveFile || r.file;
+    const lastSep = Math.max(displayFile.lastIndexOf('\\'), displayFile.lastIndexOf('/'));
+    const fname = displayFile.substring(lastSep + 1);
+    const icon = r.isArchive ? '🗜️' : getFileIcon(fname);
+    return `
+      <div class="fli${idx === activeIdx ? ' active' : ''}" id="fli-${idx}" onclick="selectFile(${idx})">
+        <span class="fli-icon">${icon}</span>
+        <div style="flex:1;min-width:0">
+          <div class="fli-name" title="${escHtml(displayFile)}">${escHtml(fname)}</div>
+          ${r.isArchive ? `<div class="fli-inner">${escHtml(r.innerFile)}</div>` : ''}
+        </div>
+        <span class="fli-badge">${r.matches.length.toLocaleString()}</span>
+      </div>`;
+  }).join('');
+}
+
+// ── Select file → show matches ────────────────────────────────────────────────
+function selectFile(idx) {
+  if (activeIdx !== null) document.getElementById('fli-' + activeIdx)?.classList.remove('active');
+  activeIdx = idx;
+  document.getElementById('fli-' + idx)?.classList.add('active');
+  document.getElementById('fli-' + idx)?.scrollIntoView({ block: 'nearest' });
+
+  const r = allResults[idx];
+  if (!r) return;
+
+  const displayFile = r.archiveFile || r.file;
+  const lastSep = Math.max(displayFile.lastIndexOf('\\'), displayFile.lastIndexOf('/'));
+  const dir   = displayFile.substring(0, lastSep + 1);
+  const fname = displayFile.substring(lastSep + 1);
+  const fpSafe = escAttr(r.file);
+  const archiveFpSafe = escAttr(r.archiveFile || r.file);
+  const openerLabel = getOpenerLabel(r.isArchive ? (r.innerFile || fname) : fname);
+
+  let html = `
+    <div class="mph">
+      <div class="mph-path">
+        <span class="mph-dir">${escHtml(dir)}</span><span class="mph-name">${escHtml(fname)}</span>
+        ${r.isArchive ? `<span class="mph-inner"> → ${escHtml(r.innerFile)}</span>` : ''}
+      </div>
+      <div class="open-hint">Opens in: <strong>${escHtml(openerLabel)}</strong></div>
+      <div class="mph-btns">
+        <button class="mph-btn open" onclick="openFile('${fpSafe}', ${r.matches[0]?.line || 1})" title="Open with default app for this file type">
+          ${getFileIcon(r.isArchive ? (r.innerFile||fname) : fname)} Open
+        </button>
+        <button class="mph-btn reveal" onclick="revealFile('${archiveFpSafe}')">📂 Reveal</button>
+        <span class="mph-count">${r.matches.length.toLocaleString()} match${r.matches.length!==1?'es':''}</span>
+      </div>
+    </div>
+    <table class="match-table">`;
+
+  r.matches.forEach(m => {
+    html += `
+      <tr>
+        <td class="td-line" onclick="openFile('${fpSafe}', ${m.line})" title="Open at line ${m.line}">${m.line}</td>
+        <td class="td-content">${highlightMatch(m.content, currentQuery, currentOpts.regex, currentOpts.case, currentOpts.exact)}</td>
+        <td class="td-actions"><button class="row-open" onclick="openFile('${fpSafe}', ${m.line})">✏️ :${m.line}</button></td>
+      </tr>`;
+  });
+
+  html += '</table>';
+  document.getElementById('matchPanel').innerHTML = html;
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+function filterFiles(val) {
+  const q = val.toLowerCase();
+  const filtered = allResults.map((r, i) => ({ r, i })).filter(({ r }) => {
+    const f = (r.archiveFile || r.file).toLowerCase();
+    return !q || f.includes(q) || (r.innerFile||'').toLowerCase().includes(q);
+  });
+  const container = document.getElementById('fileList');
+  if (!filtered.length) { container.innerHTML = '<div class="empty-filter">No files match</div>'; return; }
+  container.innerHTML = filtered.map(({ r, i }) => {
+    const displayFile = r.archiveFile || r.file;
+    const lastSep = Math.max(displayFile.lastIndexOf('\\'), displayFile.lastIndexOf('/'));
+    const fname = displayFile.substring(lastSep + 1);
+    const icon = r.isArchive ? '🗜️' : getFileIcon(fname);
+    return `
+      <div class="fli${i === activeIdx ? ' active' : ''}" id="fli-${i}" onclick="selectFile(${i})">
+        <span class="fli-icon">${icon}</span>
+        <div style="flex:1;min-width:0">
+          <div class="fli-name">${escHtml(fname)}</div>
+          ${r.isArchive ? `<div class="fli-inner">${escHtml(r.innerFile)}</div>` : ''}
+        </div>
+        <span class="fli-badge">${r.matches.length.toLocaleString()}</span>
+      </div>`;
+  }).join('');
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+async function openFile(filePath, line) {
+  try {
+    const res = await fetch('/open', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ filePath, line }) });
+    const d = await res.json();
+    showToast(d.ok ? `✏️ Opening at line ${line}…` : '⚠ ' + d.error, !d.ok);
+  } catch { showToast('⚠ Server error', true); }
+}
+
+async function revealFile(filePath) {
+  try {
+    const res = await fetch('/reveal', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ filePath }) });
+    const d = await res.json();
+    showToast(d.ok ? '📂 Revealed in Explorer' : '⚠ ' + d.error, !d.ok);
+  } catch { showToast('⚠ Server error', true); }
+}
+
+// ── Highlight ─────────────────────────────────────────────────────────────────
+function highlightMatch(content, query, isRegex, caseSensitive, exactMatch) {
+  const safe = escHtml(content);
+  if (!query) return safe;
+  try {
+    let re;
+    if (isRegex) {
+      re = new RegExp(query, caseSensitive ? 'g' : 'gi');
+    } else if (exactMatch) {
+      const esc = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      re = new RegExp(`(?<![\\w])${esc}(?![\\w])`, caseSensitive ? 'g' : 'gi');
+    } else {
+      re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), caseSensitive ? 'g' : 'gi');
+    }
+    return safe.replace(re, m => `<mark>${m}</mark>`);
+  } catch { return safe; }
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+let toastTimer;
+function showToast(msg, isError=false) {
+  document.querySelector('.toast')?.remove();
+  clearTimeout(toastTimer);
+  const t = document.createElement('div');
+  t.className = 'toast';
+  if (isError) t.style.cssText = 'border-color:var(--error);color:var(--error)';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  toastTimer = setTimeout(() => t.remove(), 2800);
+}
+</script>
+</body>
+</html>

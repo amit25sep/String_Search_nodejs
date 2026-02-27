@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FileSearch v2.0</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d0f14; --surface: #13161e; --surface2: #1a1e28; --border: #252a38;
+    --accent: #00e5ff; --accent2: #ff6b35; --accent3: #a78bfa; --accent4: #fbbf24;
+    --text: #e2e8f0; --text-muted: #6b7a99; --text-dim: #3d4a66;
+    --success: #34d399; --error: #f87171;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 32px 32px; pointer-events: none; z-index: 0;
+  }
+  .app { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100vh; }
+
+  /* Header */
+  header { padding: 14px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px; background: rgba(13,15,20,0.95); backdrop-filter: blur(12px); }
+  .logo-icon { width: 34px; height: 34px; background: linear-gradient(135deg, var(--accent), var(--accent3)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .logo-text { font-size: 1.2rem; font-weight: 800; letter-spacing: -0.02em; }
+  .logo-text span { color: var(--accent); }
+  .badge { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: var(--accent); border: 1px solid rgba(0,229,255,0.3); padding: 2px 8px; border-radius: 20px; background: rgba(0,229,255,0.05); }
+
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar { width: 320px; min-width: 320px; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; overflow-y: auto; }
+  .sidebar-inner { padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+  .field-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 5px; }
+
+  .input-wrap { position: relative; }
+  .input-wrap input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 11px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+  .input-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,229,255,0.08); }
+  .input-wrap input::placeholder { color: var(--text-dim); }
+
+  .path-wrap { position: relative; }
+  .path-wrap input { padding-right: 34px; }
+  .browse-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; transition: color 0.2s; }
+  .browse-btn:hover { color: var(--accent); }
+
+  /* Toggles */
+  .toggle-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .toggle { display: flex; align-items: center; gap: 5px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; cursor: pointer; font-size: 0.7rem; color: var(--text-muted); transition: all 0.2s; user-select: none; white-space: nowrap; }
+  .toggle.active { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.07); }
+  .toggle .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); transition: background 0.2s; flex-shrink: 0; }
+  .toggle.active .dot { background: var(--accent); }
+  .toggle.exact.active { border-color: var(--accent4); color: var(--accent4); background: rgba(251,191,36,0.07); }
+  .toggle.exact.active .dot { background: var(--accent4); }
+
+  .search-btn { width: 100%; background: linear-gradient(135deg, var(--accent), #00b8d4); border: none; border-radius: 8px; padding: 10px; color: #0d0f14; font-family: 'Syne', sans-serif; font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .search-btn:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,229,255,0.25); }
+  .search-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .stop-btn { width: 100%; background: transparent; border: 1px solid rgba(248,113,113,0.4); border-radius: 8px; padding: 8px; color: var(--error); font-family: 'Syne', sans-serif; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s; display: none; }
+  .stop-btn:hover { background: rgba(248,113,113,0.1); border-color: var(--error); }
+
+  .divider { height: 1px; background: var(--border); }
+
+  /* Format legend */
+  .format-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .fmt { font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; padding: 3px 6px; border-radius: 4px; text-align: center; }
+  .fmt-n { background: rgba(0,229,255,0.07); border: 1px solid rgba(0,229,255,0.18); color: var(--accent); }
+  .fmt-7 { background: rgba(251,191,36,0.07); border: 1px solid rgba(251,191,36,0.18); color: var(--accent4); }
+
+  /* Stats */
+  .stats-bar { padding: 10px 18px; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--text-muted); border-top: 1px solid var(--border); display: none; flex-direction: column; gap: 3px; }
+  .stat { display: flex; justify-content: space-between; }
+  .stat-val { color: var(--accent); font-weight: 600; }
+
+  /* Clear index button */
+  .clear-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--text-dim); cursor: pointer; transition: all 0.2s; }
+  .clear-btn:hover { border-color: var(--error); color: var(--error); }
+
+  /* Results pane */
+  .results-pane { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+  .results-header { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--surface); position: sticky; top: 0; z-index: 10; }
+  .results-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+  .results-count { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--success); background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.2); padding: 2px 8px; border-radius: 20px; }
+  .results-count.none { color: var(--error); background: rgba(248,113,113,0.08); border-color: rgba(248,113,113,0.2); }
+
+  .results-list { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+
+  /* File card — list only view */
+  .file-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; animation: slideIn 0.18s ease both; }
+  .file-card.archive-card { border-color: rgba(251,191,36,0.2); }
+  @keyframes slideIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+  .file-row { padding: 9px 12px; display: flex; align-items: center; gap: 8px; }
+  .file-card.archive-card .file-row { background: rgba(251,191,36,0.03); }
+  .file-icon { font-size: 13px; flex-shrink: 0; }
+  .file-path-block { flex: 1; min-width: 0; }
+  .file-path { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-dir { color: var(--text-muted); }
+  .file-name { color: var(--accent); font-weight: 600; }
+  .file-inner { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--accent4); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .archive-tag { font-family: 'JetBrains Mono', monospace; font-size: 0.55rem; background: rgba(251,191,36,0.1); color: var(--accent4); border: 1px solid rgba(251,191,36,0.25); padding: 1px 5px; border-radius: 4px; flex-shrink: 0; }
+  .match-badge { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; background: rgba(255,107,53,0.12); color: var(--accent2); border: 1px solid rgba(255,107,53,0.22); padding: 2px 7px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+  .file-btns { display: flex; gap: 4px; flex-shrink: 0; }
+  .file-btn { border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; cursor: pointer; transition: all 0.15s; white-space: nowrap; background: var(--surface2); color: var(--text-muted); }
+  .file-btn:hover { border-color: var(--accent3); color: var(--accent3); background: rgba(167,139,250,0.07); }
+  .file-btn.show-list { background: rgba(0,229,255,0.07); border-color: rgba(0,229,255,0.25); color: var(--accent); }
+  .file-btn.show-list:hover { background: rgba(0,229,255,0.15); border-color: var(--accent); }
+
+  /* Sort bar */
+  .sort-bar { padding: 7px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; background: var(--surface2); flex-wrap: wrap; }
+  .sort-label { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 2px; }
+  .sort-btn { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; padding: 3px 9px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .sort-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+  .sort-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.08); }
+  .sort-btn .arrow { font-size: 9px; opacity: 0.7; }
+
+  /* Progress UI */
+  .progress-wrap { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+  .progress-title { font-size: 0.78rem; font-weight: 700; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .progress-bar-track { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent3)); border-radius: 2px; transition: width 0.3s ease; }
+
+  .progress-stats { display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--text-muted); }
+  .progress-eta { color: var(--accent4); }
+
+  .progress-file { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--surface2); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); }
+  .progress-file span { color: var(--text-muted); }
+
+  .live-matches { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--success); }
+
+  /* Empty state */
+  .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-dim); padding: 40px; text-align: center; }
+  .empty-icon { font-size: 44px; opacity: 0.35; }
+  .empty-title { font-size: 0.95rem; font-weight: 700; color: var(--text-muted); }
+  .empty-sub { font-size: 0.78rem; max-width: 280px; line-height: 1.5; }
+
+  .error-msg { margin: 14px; background: rgba(248,113,113,0.07); border: 1px solid rgba(248,113,113,0.22); border-radius: 8px; padding: 11px 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--error); }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 22px; right: 22px; background: var(--surface2); border: 1px solid var(--accent); border-radius: 8px; padding: 9px 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--accent); z-index: 999; box-shadow: 0 4px 20px rgba(0,229,255,0.15); animation: toastIn 0.2s ease; pointer-events: none; }
+  @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Browse modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: center; justify-content: center; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 500px; max-height: 68vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 56px rgba(0,0,0,0.6); }
+  .modal-header { padding: 13px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .modal-title { font-size: 0.82rem; font-weight: 700; }
+  .modal-path { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { flex: 1; overflow-y: auto; padding: 6px; }
+  .dir-item { display: flex; align-items: center; gap: 8px; padding: 7px 11px; border-radius: 5px; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-muted); transition: background 0.12s; }
+  .dir-item:hover { background: rgba(0,229,255,0.06); color: var(--text); }
+  .di { color: var(--accent3); }
+  .modal-footer { padding: 11px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+  .modal-footer button { padding: 6px 14px; border-radius: 6px; font-size: 0.76rem; font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .btn-select { background: var(--accent); color: #0d0f14; border: none; margin-left: auto; }
+  .btn-cancel { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo-icon">🔍</div>
+    <div class="logo-text">File<span>Search</span></div>
+    <div class="badge">v2.0 · LIVE PROGRESS</div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-inner">
+
+        <div>
+          <div class="field-label">Search Path</div>
+          <div class="path-wrap input-wrap">
+            <input type="text" id="searchPath" placeholder="C:\Users\YourName\Documents" />
+            <button class="browse-btn" onclick="openBrowser()" title="Browse">📁</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="field-label">Search Query</div>
+          <div class="input-wrap">
+            <input type="text" id="query" placeholder="Enter text or regex..." onkeydown="if(event.key==='Enter')doSearch()" />
+          </div>
+        </div>
+
+        <div>
+          <div class="field-label">File Extensions (optional)</div>
+          <div class="input-wrap">
+            <input type="text" id="extensions" placeholder=".txt, .csv, .log, .zip" />
+          </div>
+        </div>
+
+        <div>
+          <div class="field-label">Options</div>
+          <div class="toggle-row">
+            <div class="toggle" id="toggle-exact" onclick="toggleOpt('exact')">
+              <div class="dot"></div> Exact Match
+            </div>
+            <div class="toggle" id="toggle-regex" onclick="toggleOpt('regex')">
+              <div class="dot"></div> Regex
+            </div>
+            <div class="toggle" id="toggle-case" onclick="toggleOpt('case')">
+              <div class="dot"></div> Case Sensitive
+            </div>
+          </div>
+          <div style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:var(--text-dim);line-height:1.5">
+            💡 <span style="color:var(--accent4)">Exact Match</span>: "123" won't match "123456"
+          </div>
+        </div>
+
+        <button class="search-btn" id="searchBtn" onclick="doSearch()">⚡ Search Files</button>
+        <button class="stop-btn" id="stopBtn" onclick="stopScan()">⏹ Stop Scanning</button>
+
+        <div class="divider"></div>
+
+        <div>
+          <div class="field-label" style="margin-bottom:8px">Supported Archive Formats</div>
+          <div class="format-grid">
+            <div class="fmt fmt-n">.zip / .jar</div>
+            <div class="fmt fmt-n">.war / .ear</div>
+            <div class="fmt fmt-n">.tar / .tar.gz</div>
+            <div class="fmt fmt-n">.tgz / .gz</div>
+            <div class="fmt fmt-n">.tar.bz2</div>
+            <div class="fmt fmt-n">.tar.xz</div>
+            <div class="fmt fmt-7">.7z ★</div>
+            <div class="fmt fmt-7">.rar ★</div>
+          </div>
+          <div style="font-size:0.58rem;color:var(--text-dim);margin-top:5px;font-family:'JetBrains Mono',monospace">★ requires 7-Zip installed</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:0.6rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace">Index cache (5 min TTL)</span>
+          <button class="clear-btn" onclick="clearIndex()">🗑 Clear Index</button>
+        </div>
+
+      </div>
+
+      <div class="stats-bar" id="statsBar">
+        <div class="stat"><span>Files Scanned</span><span class="stat-val" id="statFiles">—</span></div>
+        <div class="stat"><span>Files Matched</span><span class="stat-val" id="statMatched">—</span></div>
+        <div class="stat"><span>Total Matches</span><span class="stat-val" id="statMatches">—</span></div>
+        <div class="stat"><span>Time</span><span class="stat-val" id="statTime">—</span></div>
+      </div>
+    </aside>
+
+    <main class="results-pane" id="resultsPane">
+      <div class="empty-state">
+        <div class="empty-icon">🗂️</div>
+        <div class="empty-title">Ready to Search</div>
+        <div class="empty-sub">Enter a path and query. Use <span style="color:var(--accent4)">Exact Match</span> to find "123" without matching "123456".</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Browse Modal -->
+<div class="modal-overlay" id="browseModal" style="display:none" onclick="if(event.target===this)closeBrowser()">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📁 Browse</span>
+      <span class="modal-path" id="modalCurrentPath">C:\</span>
+      <button class="modal-close" onclick="closeBrowser()">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeBrowser()">Cancel</button>
+      <button class="btn-select" onclick="selectCurrentDir()">Select This Folder</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const opts = { exact: false, regex: false, case: false };
+let currentBrowsePath = 'C:\\';
+let lastResultId = null;
+let currentSort = { key: 'default', dir: 1 }; // key: default|name|ext|matches|dir, dir: 1=asc -1=desc
+let lastQuery = '';
+let searchAbortController = null;
+
+function toggleOpt(key) {
+  opts[key] = !opts[key];
+  // Exact and Regex are mutually exclusive
+  if (key === 'exact' && opts.exact) { opts.regex = false; document.getElementById('toggle-regex').classList.remove('active'); }
+  if (key === 'regex' && opts.regex) { opts.exact = false; document.getElementById('toggle-exact').classList.remove('active'); }
+  const el = document.getElementById('toggle-' + key);
+  el.classList.toggle('active', opts[key]);
+  if (key === 'exact') el.classList.toggle('exact', true);
+}
+
+async function doSearch() {
+  const searchPath = document.getElementById('searchPath').value.trim();
+  const query = document.getElementById('query').value.trim();
+  const extensions = document.getElementById('extensions').value.trim();
+  if (!searchPath || !query) { showError('Please enter a path and a search query.'); return; }
+
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true; btn.textContent = '⏳ Searching...';
+  document.getElementById('stopBtn').style.display = 'block';
+  lastQuery = query;
+  showProgress();
+
+  try {
+    const res = await fetch('/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ searchPath, query, extensions, isRegex: opts.regex, caseSensitive: opts.case, exactMatch: opts.exact })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      showError(err.error || 'Search failed');
+      return;
+    }
+
+    // Parse SSE stream
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop();
+      for (const part of parts) {
+        const lines = part.split('\n');
+        let event = 'message', data = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) event = line.slice(7).trim();
+          if (line.startsWith('data: ')) data = line.slice(6).trim();
+        }
+        if (!data) continue;
+        try {
+          const payload = JSON.parse(data);
+          if (event === 'start')    handleStart(payload);
+          if (event === 'progress') handleProgress(payload);
+          if (event === 'match')    handleMatch(payload);
+          if (event === 'done')     handleDone(payload);
+        } catch {}
+      }
+    }
+  } catch(e) {
+    showError('Server error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '⚡ Search Files';
+    document.getElementById('stopBtn').style.display = 'none';
+  }
+}
+
+let liveMatchCount = 0;
+let streamedResults = []; // collects results as they stream in
+
+function handleStart({ total, fromCache, resultId }) {
+  liveMatchCount = 0;
+  streamedResults = [];
+  // Set resultId immediately — Show List works even before scan completes
+  if (resultId) lastResultId = resultId;
+}
+
+function handleProgress({ current, rate, currentFile, matches }) {
+  const cur = document.getElementById('prog-current');
+  const rat = document.getElementById('prog-rate');
+  const fil = document.getElementById('prog-file');
+  const mat = document.getElementById('prog-matches');
+  if (cur) cur.textContent = current.toLocaleString();
+  if (rat) rat.textContent = rate > 0 ? rate.toLocaleString() : '—';
+  if (fil) fil.innerHTML = '<span>Scanning:</span> ' + escHtml(currentFile);
+  if (mat) mat.textContent = (matches || streamedResults.length).toLocaleString();
+}
+
+function handleMatch(r) {
+  streamedResults.push(r);
+  liveMatchCount += r.matches.length;
+  // Update live stats sidebar
+  const sb = document.getElementById('statsBar');
+  if (sb) {
+    sb.style.display = 'flex';
+    document.getElementById('statMatched').textContent = streamedResults.length.toLocaleString();
+    document.getElementById('statMatches').textContent = liveMatchCount.toLocaleString();
+  }
+  // Update inline progress match counter
+  const pm = document.getElementById('prog-matches');
+  if (pm) pm.textContent = streamedResults.length.toLocaleString();
+  // Append new file row to results list live
+  appendFileRow(r, streamedResults.length - 1);
+}
+
+function appendFileRow(r, idx) {
+  const list = document.getElementById('live-results-list');
+  if (!list) return; // safety
+
+  // Show sort bar on first result
+  const sb = document.getElementById('sort-bar');
+  if (sb && sb.style.display === 'none') sb.style.display = '';
+
+  // Update count
+  const countEl = document.getElementById('live-count');
+  if (countEl) countEl.textContent = streamedResults.length.toLocaleString() + ' file' + (streamedResults.length!==1?'s':'') + ' · ' + liveMatchCount.toLocaleString() + ' matches';
+
+  // If sort is default, just append; otherwise re-render sorted
+  if (currentSort.key === 'default') {
+    renderFileCard(r, idx, list);
+  } else {
+    rerenderSorted();
+  }
+}
+async function stopScan() {
+  try {
+    await fetch('/stop', { method: 'POST' });
+  } catch {}
+  document.getElementById('stopBtn').style.display = 'none';
+  // Immediately kill spinner on client — don't wait for done event
+  stopProgressUI(
+    'Files Found (stopped)',
+    streamedResults.length.toLocaleString() + ' file' + (streamedResults.length !== 1 ? 's' : '') + ' · ' + liveMatchCount.toLocaleString() + ' matches · stopped',
+    true
+  );
+  showToast('⏹ Scan stopped');
+}
+
+function stopProgressUI(label = 'Files Found', countText = '', isError = false) {
+  // Hide the spinner/progress block
+  const pw = document.getElementById('progress-wrap');
+  if (pw) pw.style.display = 'none';
+
+  // Update only the title span — don't replace the whole header (would kill sort bar)
+  const titleEl = document.querySelector('#resultsPane .results-header .results-title');
+  if (titleEl) {
+    titleEl.textContent = label;
+  } else {
+    // Header doesn't exist yet (no results came in) — safe to create it
+    const hdr = document.querySelector('#resultsPane .results-header');
+    if (hdr) hdr.innerHTML = `
+      <span class="results-title">${label}</span>
+      <span id="live-count" class="results-count${isError ? ' none' : ''}">${countText}</span>`;
+  }
+
+  // Update count pill
+  const countEl = document.getElementById('live-count');
+  if (countEl) {
+    countEl.textContent = countText;
+    countEl.style.display = '';
+    if (isError) countEl.classList.add('none'); else countEl.classList.remove('none');
+  }
+}
+
+function handleDone(data) {
+  lastResultId = data.resultId;
+  const { filesScanned, totalFiles, totalMatches, elapsed, stopped, matchedFiles } = data;
+
+  const matchCount = streamedResults.length;
+  const countText = matchCount.toLocaleString() + ' file' + (matchCount !== 1 ? 's' : '') +
+    ' · ' + totalMatches.toLocaleString() + ' matches' + (stopped ? ' · stopped' : '');
+
+  stopProgressUI(
+    stopped ? 'Files Found (stopped)' : matchCount === 0 ? 'Results' : 'Files Found',
+    countText,
+    stopped
+  );
+
+  // Sidebar stats
+  const sb = document.getElementById('statsBar');
+  if (sb) sb.style.display = 'flex';
+  document.getElementById('statFiles').textContent = filesScanned.toLocaleString();
+  document.getElementById('statMatched').textContent = (matchedFiles || matchCount).toLocaleString();
+  document.getElementById('statMatches').textContent = totalMatches.toLocaleString();
+  document.getElementById('statTime').textContent = elapsed + 's' + (stopped ? ' (stopped)' : '');
+
+  // If no results at all
+  if (matchCount === 0) {
+    document.getElementById('resultsPane').innerHTML = `
+      <div class="results-header"><span class="results-title">Results</span><span class="results-count none">No matches</span></div>
+      <div class="empty-state">
+        <div class="empty-icon">🔎</div>
+        <div class="empty-title">No Matches Found</div>
+        <div class="empty-sub">Try a different query, remove Exact Match, or check file extensions.</div>
+      </div>`;
+  }
+}
+
+function showProgress() {
+  streamedResults = [];
+  liveMatchCount = 0;
+  currentSort = { key: 'default', dir: 1 };
+  document.getElementById('resultsPane').innerHTML = `
+    <div class="results-header">
+      <span class="results-title">Scanning...</span>
+      <span id="live-count" class="results-count" style="display:none"></span>
+    </div>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-title">
+        <div class="spinner"></div>
+        <span id="prog-headline">Scanning files &amp; archives</span>
+      </div>
+      <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:4px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem">
+          <span style="color:var(--text-muted)">Files scanned: </span>
+          <span id="prog-current" style="color:var(--accent);font-weight:700">0</span>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem">
+          <span style="color:var(--text-muted)">Matches found: </span>
+          <span id="prog-matches" style="color:var(--success);font-weight:700">0</span>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem">
+          <span style="color:var(--text-muted)">Speed: </span>
+          <span id="prog-rate" style="color:var(--accent4);font-weight:700">—</span>
+          <span style="color:var(--text-dim)"> files/sec</span>
+        </div>
+      </div>
+      <div class="progress-file" id="prog-file" style="margin-top:8px"><span>Initialising...</span></div>
+    </div>
+    <div class="sort-bar" id="sort-bar" style="display:none">
+      <span class="sort-label">Sort:</span>
+      <button class="sort-btn active" id="sb-default" onclick="applySort('default')" title="Discovery order">🕐 Found Order</button>
+      <button class="sort-btn" id="sb-matches" onclick="applySort('matches')" title="Most matches first">🔥 Matches</button>
+      <button class="sort-btn" id="sb-name" onclick="applySort('name')" title="Sort by file name">🔤 File Name</button>
+      <button class="sort-btn" id="sb-ext" onclick="applySort('ext')" title="Sort by extension">📎 Extension</button>
+      <button class="sort-btn" id="sb-dir" onclick="applySort('dir')" title="Sort by directory path">📁 Directory</button>
+    </div>
+    <div class="results-list" id="live-results-list"></div>`;
+}
+
+
+function showError(msg) {
+  document.getElementById('resultsPane').innerHTML = `<div class="error-msg">⚠ ${escHtml(msg)}</div>`;
+}
+
+function renderResults(data) {
+  const { results, totalMatches } = data;
+  const pane = document.getElementById('resultsPane');
+
+  if (results.length === 0) {
+    pane.innerHTML = `
+      <div class="results-header"><span class="results-title">Results</span><span class="results-count none">No matches</span></div>
+      <div class="empty-state">
+        <div class="empty-icon">🔎</div>
+        <div class="empty-title">No Matches Found</div>
+        <div class="empty-sub">Try a different query, remove Exact Match, or check file extensions.</div>
+      </div>`;
+    return;
+  }
+
+  let html = `
+    <div class="results-header">
+      <span class="results-title">Files Found</span>
+      <span class="results-count">${results.length.toLocaleString()} file${results.length!==1?'s':''} · ${totalMatches.toLocaleString()} matches${data.stopped ? ' · <span style=\"color:var(--error)\">stopped early</span>' : ''}</span>
+    </div>
+    <div class="results-list">`;
+
+  results.forEach((r, idx) => {
+    const isArchive = r.isArchive;
+    const displayFile = r.archiveFile || r.file;
+    const lastSep = Math.max(displayFile.lastIndexOf('\\'), displayFile.lastIndexOf('/'));
+    const dir   = displayFile.substring(0, lastSep + 1);
+    const fname = displayFile.substring(lastSep + 1);
+    const archiveFpSafe = escAttr(r.archiveFile || r.file);
+    const icon  = isArchive ? getArchiveIcon(fname) : getFileIcon(fname);
+
+    html += `
+      <div class="file-card${isArchive ? ' archive-card' : ''}">
+        <div class="file-row">
+          <span class="file-icon">${icon}</span>
+          <div class="file-path-block">
+            <div class="file-path"><span class="file-dir">${escHtml(dir)}</span><span class="file-name">${escHtml(fname)}</span></div>
+            ${isArchive ? `<div class="file-inner">📄 ${escHtml(r.innerFile)}</div>` : ''}
+          </div>
+          ${isArchive ? `<span class="archive-tag">ARCHIVE</span>` : ''}
+          <span class="match-badge">${r.matches.length.toLocaleString()} match${r.matches.length!==1?'es':''}</span>
+          <div class="file-btns">
+            <button class="file-btn" onclick="revealFile('${archiveFpSafe}')">📂 Reveal</button>
+            <button class="file-btn show-list" onclick="showList(${idx})">📋 Show List</button>
+          </div>
+        </div>
+      </div>`;
+  });
+
+  html += '</div>';
+  pane.innerHTML = html;
+}
+
+function getFileIcon(fname) {
+  const ext = (fname.split('.').pop() || '').toLowerCase();
+  const map = { csv:'📊', xlsx:'📊', xls:'📊', doc:'📝', docx:'📝', pdf:'📕', py:'🐍', js:'🟨', ts:'🟦', json:'📋', xml:'📋', html:'🌐', css:'🎨', md:'📖', log:'📜', txt:'📄', zip:'🗜️', tar:'📦', gz:'🗜️' };
+  return map[ext] || '📄';
+}
+
+function getArchiveIcon(fname) {
+  return fname.toLowerCase().endsWith('.tar') ? '📦' : '🗜️';
+}
+
+function getFileName(r) {
+  const f = r.archiveFile || r.file;
+  return f.substring(Math.max(f.lastIndexOf('\\'), f.lastIndexOf('/')) + 1).toLowerCase();
+}
+function getFileExt(r) {
+  const name = getFileName(r);
+  const dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.substring(dot) : '';
+}
+function getFileDir(r) {
+  const f = r.archiveFile || r.file;
+  return f.substring(0, Math.max(f.lastIndexOf('\\'), f.lastIndexOf('/'))).toLowerCase();
+}
+
+function applySort(key) {
+  // Toggle direction if same key clicked again
+  if (currentSort.key === key) {
+    currentSort.dir *= -1;
+  } else {
+    currentSort.key = key;
+    // Default direction: matches → desc, everything else → asc
+    currentSort.dir = key === 'matches' ? -1 : 1;
+  }
+
+  // Update button states
+  ['default','matches','name','ext','dir'].forEach(k => {
+    const btn = document.getElementById('sb-' + k);
+    if (!btn) return;
+    btn.classList.toggle('active', k === currentSort.key);
+    // Show arrow on active button
+    const arrow = btn.querySelector('.arrow');
+    if (arrow) arrow.remove();
+    if (k === currentSort.key) {
+      const a = document.createElement('span');
+      a.className = 'arrow';
+      a.textContent = currentSort.dir === 1 ? '▲' : '▼';
+      btn.appendChild(a);
+    }
+  });
+
+  rerenderSorted();
+}
+
+function getSortedResults() {
+  const arr = [...streamedResults];
+  const { key, dir } = currentSort;
+  if (key === 'default') return arr; // insertion order
+  arr.sort((a, b) => {
+    let va, vb;
+    if (key === 'matches') { va = a.matches.length; vb = b.matches.length; }
+    else if (key === 'name') { va = getFileName(a); vb = getFileName(b); }
+    else if (key === 'ext')  { va = getFileExt(a);  vb = getFileExt(b); }
+    else if (key === 'dir')  { va = getFileDir(a);  vb = getFileDir(b); }
+    if (va < vb) return -1 * dir;
+    if (va > vb) return  1 * dir;
+    return 0;
+  });
+  return arr;
+}
+
+function rerenderSorted() {
+  const list = document.getElementById('live-results-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const sorted = getSortedResults();
+  sorted.forEach((r) => {
+    // find original index in streamedResults for Show List
+    const origIdx = streamedResults.indexOf(r);
+    renderFileCard(r, origIdx, list);
+  });
+}
+
+function renderFileCard(r, idx, list) {
+  const isArchive = r.isArchive;
+  const displayFile = r.archiveFile || r.file;
+  const lastSep = Math.max(displayFile.lastIndexOf('\\'), displayFile.lastIndexOf('/'));
+  const dir   = displayFile.substring(0, lastSep + 1);
+  const fname = displayFile.substring(lastSep + 1);
+  const archiveFpSafe = escAttr(r.archiveFile || r.file);
+  const icon  = isArchive ? (fname.toLowerCase().endsWith('.tar') ? '📦' : '🗜️') : getFileIcon(fname);
+
+  const card = document.createElement('div');
+  card.className = 'file-card' + (isArchive ? ' archive-card' : '');
+  card.innerHTML = `
+    <div class="file-row">
+      <span class="file-icon">${icon}</span>
+      <div class="file-path-block">
+        <div class="file-path"><span class="file-dir">${escHtml(dir)}</span><span class="file-name">${escHtml(fname)}</span></div>
+        ${isArchive ? `<div class="file-inner">📄 ${escHtml(r.innerFile)}</div>` : ''}
+      </div>
+      ${isArchive ? '<span class="archive-tag">ARCHIVE</span>' : ''}
+      <span class="match-badge">${r.matches.length.toLocaleString()} match${r.matches.length!==1?'es':''}</span>
+      <div class="file-btns">
+        <button class="file-btn" onclick="revealFile('${archiveFpSafe}')">📂 Reveal</button>
+        <button class="file-btn show-list" onclick="showList(${idx})">📋 Show List</button>
+      </div>
+    </div>`;
+  list.appendChild(card);
+}
+
+function showList(fileIdx) {
+  if (!lastResultId) { showToast('⚠ No result — please search again', true); return; }
+  const url = '/results?id=' + lastResultId + '&file=' + fileIdx + '&query=' + encodeURIComponent(lastQuery) + '&regex=' + opts.regex + '&case=' + opts.case + '&exact=' + opts.exact;
+  window.open(url, '_blank');
+}
+
+async function revealFile(filePath) {
+  try {
+    const res = await fetch('/reveal', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ filePath }) });
+    const d = await res.json();
+    showToast(d.ok ? '📂 Revealed in Explorer' : '⚠ ' + d.error, !d.ok);
+  } catch { showToast('⚠ Server error', true); }
+}
+
+async function clearIndex() {
+  try {
+    await fetch('/clear-index', { method: 'POST' });
+    showToast('🗑 Index cache cleared');
+  } catch { showToast('⚠ Failed to clear index', true); }
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+let toastTimer;
+function showToast(msg, isError=false) {
+  document.querySelector('.toast')?.remove();
+  clearTimeout(toastTimer);
+  const t = document.createElement('div');
+  t.className = 'toast';
+  if (isError) t.style.cssText = 'border-color:var(--error);color:var(--error)';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  toastTimer = setTimeout(() => t.remove(), 2800);
+}
+
+// ── Browse modal ──────────────────────────────────────────────────────────────
+async function openBrowser() {
+  const cur = document.getElementById('searchPath').value.trim() || 'C:\\';
+  currentBrowsePath = cur;
+  document.getElementById('browseModal').style.display = 'flex';
+  await loadDir(cur);
+}
+function closeBrowser() { document.getElementById('browseModal').style.display = 'none'; }
+
+async function loadDir(p) {
+  currentBrowsePath = p;
+  document.getElementById('modalCurrentPath').textContent = p;
+  const body = document.getElementById('modalBody');
+  body.innerHTML = '<div style="padding:14px;color:var(--text-muted);font-size:0.78rem">Loading...</div>';
+  try {
+    const res = await fetch('/browse?path=' + encodeURIComponent(p));
+    const data = await res.json();
+    if (!res.ok) { body.innerHTML = `<div style="padding:14px;color:var(--error);font-size:0.72rem">${escHtml(data.error)}</div>`; return; }
+    const norm = p.replace(/[/\\]+$/, '');
+    const parentSep = Math.max(norm.lastIndexOf('\\'), norm.lastIndexOf('/'));
+    const parent = parentSep > 0 ? norm.substring(0, parentSep) : null;
+    let html = '';
+    if (parent) html += `<div class="dir-item" onclick="loadDir('${escAttr(parent)}')"><span class="di">⬆</span> ..</div>`;
+    if (!data.dirs.length) html += `<div style="padding:14px;color:var(--text-dim);font-family:monospace;font-size:0.72rem">No subdirectories</div>`;
+    data.dirs.forEach(d => { html += `<div class="dir-item" onclick="loadDir('${escAttr(d.path)}')"><span class="di">📁</span> ${escHtml(d.name)}</div>`; });
+    body.innerHTML = html;
+  } catch(e) { body.innerHTML = `<div style="padding:14px;color:var(--error);font-size:0.72rem">${escHtml(e.message)}</div>`; }
+}
+
+function selectCurrentDir() {
+  document.getElementById('searchPath').value = currentBrowsePath;
+  closeBrowser();
+}
+</script>
+</body>
+</html>
